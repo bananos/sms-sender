@@ -1,13 +1,13 @@
 #!/bin/bash
 # @author Krzysztof Szewczyk
 # @description Script to sending sms by Huawei E3372 HiLink (software/firmware: 22.286.03.00.00, webui: 16.100.05.00.03)
-
+# @description Fixed to work on software/firmware: 22.315.01.00.1080, webui: 17.100.13.02.1080
 help()
 {
 	echo "USAGE:
 	$(basename $0) -t|--to <dest_number> -m|--message <message> [-i|--ip <ip>] [-a|--accent] [-l|--log <log_file>] [-h|--help]
 		-t|--to dest_number
-			Receiver phone number or numbers separated by comma (,) eg. 123456789,987654321.
+			Receiver phone number or numbers separated by comma (,) eg. +123456789,987654321.
 		-m|--message message
 			Message to send.
 		-i|--ip ip
@@ -18,7 +18,7 @@ help()
 			[optional] File to logging.
 		-h|--help
 			Shows this help and exit.
-			
+	
 	Environment variables:
 		SMS_NUMBERS- the same as --to
 		SMS_MESSAGE    - the same as --message
@@ -31,7 +31,10 @@ help()
 		0 - OK
 		1 - command line errors
 		2 - modem not available
-		3 - sending failed"
+		3 - sending failed
+
+    Examples: 
+        ./sms_e3372.sh --to \"+380123456789\" --message \"Test from cmd\""
 }
 
 
@@ -143,19 +146,25 @@ fi
 
 
 #
-# get token
+# get request tokens
 #
 
-token=$(curl "http://$SMS_IP/api/webserver/token" 2>/dev/null | sed -n -e 's/.*<token>\(.*\)<\/token>.*/\1/p')
+# Obtain SessionID and __RequestVerificationToken
+SesTokInfo=$(curl "http://192.168.8.1/api/webserver/SesTokInfo" --silent)
+SessionID=$(echo "$SesTokInfo" | grep "SessionID=" | cut -b 20-147)
+__RequestVerificationToken=$(echo "$SesTokInfo" | grep "TokInfo" | cut -b 10-41)
 
-
+#echo -e "Got SessionID: $SessionID"
+#echo -e "Got __RequestVerificationToken: $__RequestVerificationToken"
+       
 #
 # send sms
 #
 
 response=$(curl -X POST "http://$SMS_IP/api/sms/send-sms"\
 	-q -s\
-	-H "__RequestVerificationToken: $token"\
+	-H "Cookie: SessionID=$SessionID"\
+	-H "__RequestVerificationToken: $__RequestVerificationToken"\
 	--data "<?xml version=\"1.0\" encoding=\"UTF-8\"?><request><Index>-1</Index><Phones>$receivers</Phones><Sca></Sca><Content>$SMS_MESSAGE</Content><Length>-1</Length><Reserved>-1</Reserved><Date>-1</Date></request>"\
 	| sed -n -e 's/.*<response>\(.*\)<\/response>.*/\1/p')
 
